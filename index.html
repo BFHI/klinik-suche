@@ -3,50 +3,69 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Klinik-Finder Responsive</title>
+    <title>Klinik-Finder Pro</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <style>
-        /* Grundlayout für PC (Desktop) */
-        body { margin: 0; display: flex; font-family: 'Segoe UI', sans-serif; height: 100vh; overflow: hidden; flex-direction: row; }
-        #sidebar { width: 380px; height: 100%; overflow-y: auto; background: #fff; z-index: 1000; display: flex; flex-direction: column; box-shadow: 2px 0 10px rgba(0,0,0,0.1); }
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', Roboto, sans-serif; height: 100vh; display: flex; overflow: hidden; }
+        
+        /* Karten-Layout (nimmt immer alles ein) */
         #map { flex-grow: 1; height: 100%; z-index: 1; }
 
-        /* Mobile Optimierung (Handy & Tablet) */
-        @media (max-width: 768px) {
-            body { flex-direction: column; } /* Stapelt Sidebar über Karte */
-            #sidebar { width: 100%; height: 50vh; order: 2; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); } /* Sidebar unten */
-            #map { width: 100%; height: 50vh; order: 1; } /* Karte oben */
-            .search-container { padding: 10px !important; }
-            h2 { font-size: 16px !important; }
+        /* Sidebar für Desktop */
+        #sidebar { 
+            width: 380px; height: 100%; background: white; z-index: 1000; 
+            display: flex; flex-direction: column; box-shadow: 2px 0 10px rgba(0,0,0,0.1); 
+            transition: all 0.3s ease;
         }
 
-        /* Styling der Elemente */
-        .search-container { background: #004a99; color: white; padding: 20px; }
-        input { width: 100%; padding: 12px; border-radius: 5px; border: none; font-size: 16px; margin-top: 8px; box-sizing: border-box; }
-        .btn-group { display: flex; gap: 5px; margin-top: 10px; }
-        .btn-primary { flex: 2; padding: 12px; background: #ff8c00; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; }
-        .btn-secondary { flex: 1; padding: 12px; background: #95a5a6; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        /* Schwebende Suche für Mobile */
+        @media (max-width: 768px) {
+            #sidebar { 
+                position: absolute; bottom: 20px; left: 10px; right: 10px; 
+                width: auto; height: auto; max-height: 80vh; 
+                border-radius: 15px; box-shadow: 0 -5px 20px rgba(0,0,0,0.2); 
+                order: 2;
+            }
+            .search-container { border-radius: 15px 15px 0 0; }
+        }
+
+        /* UI Elemente */
+        .search-container { background: #004a99; color: white; padding: 20px; position: sticky; top: 0; }
+        .search-container h2 { margin: 0 0 10px 0; font-size: 18px; }
+        input { width: 100%; padding: 12px; border-radius: 8px; border: none; font-size: 16px; box-sizing: border-box; }
         
-        .clinic-card { padding: 15px; border-bottom: 1px solid #eee; position: relative; cursor: pointer; }
-        .distanz-tag { position: absolute; top: 15px; right: 15px; font-size: 11px; font-weight: bold; background: #eee; padding: 2px 5px; border-radius: 4px; }
-        .status-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: bold; margin-top: 8px; color: white; }
+        .btn-group { display: flex; gap: 8px; margin-top: 10px; }
+        .btn-primary { flex: 2; padding: 12px; background: #ff8c00; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 16px; }
+        .btn-secondary { flex: 1; padding: 12px; background: rgba(255,255,255,0.2); color: white; border: none; border-radius: 8px; cursor: pointer; }
+
+        #results { overflow-y: auto; background: white; flex-grow: 1; border-radius: 0 0 15px 15px; }
+        
+        .clinic-card { padding: 15px; border-bottom: 1px solid #eee; position: relative; cursor: pointer; transition: 0.2s; }
+        .clinic-card:hover { background: #f9f9f9; }
+        .distanz-tag { position: absolute; top: 15px; right: 15px; font-size: 11px; font-weight: bold; background: #f0f0f0; padding: 3px 6px; border-radius: 4px; color: #555; }
+        
+        .status-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: bold; margin-top: 8px; color: white; text-transform: uppercase; }
         .zertifiziert { background: #ff8c00; }
         .mitglied { background: #bdc3c7; }
+        
+        .klinik-info { font-size: 13px; color: #d35400; font-style: italic; margin-top: 2px; display: block; }
     </style>
 </head>
 <body>
 
 <div id="sidebar">
     <div class="search-container">
-        <h2>Klinik-Suche</h2>
-        <input type="text" id="plzInput" placeholder="PLZ eingeben (z.B. 46149)">
+        <h2>Klinik-Finder</h2>
+        <input type="text" id="plzInput" placeholder="PLZ eingeben (z.B. 46149)" inputmode="numeric">
         <div class="btn-group">
             <button class="btn-primary" onclick="sucheStarten()">Suchen</button>
             <button class="btn-secondary" onclick="alleAnzeigen()">Reset</button>
         </div>
     </div>
-    <div id="results"><p style="text-align:center; padding:20px; color:#888;">Lade Daten...</p></div>
+    <div id="results">
+        <p style="text-align:center; padding:30px; color:#999;">Lade Datenbank...</p>
+    </div>
 </div>
 
 <div id="map"></div>
@@ -56,10 +75,17 @@
     const csvURL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQM3LZvdiFjWWIQm59jiSDPb_F3lhEEFjqhrPwob_H1_zMp_ohPORfxuzlMo69tjyDw44UwDigevftu/pub?gid=0&single=true&output=csv';
     let map, markerLayer, alleKliniken = [];
 
-    map = L.map('map').setView([51.1657, 10.4515], 6);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    // Karte initialisieren
+    map = L.map('map', { zoomControl: false }).setView([51.1657, 10.4515], 6);
+    L.control.zoom({ position: 'topright' }).addTo(map); // Zoom-Buttons nach oben rechts für Daumen-Freiheit
+    
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+    
     markerLayer = L.layerGroup().addTo(map);
 
+    // Daten laden & Bereinigen (Komma zu Punkt)
     Papa.parse(csvURL, {
         download: true, header: true, skipEmptyLines: true,
         complete: function(results) {
@@ -69,33 +95,48 @@
                 return row;
             }).filter(row => row.Lat && !isNaN(parseFloat(row.Lat)));
             drawMarkers(alleKliniken);
-            document.getElementById('results').innerHTML = '<p style="text-align:center; padding:20px; color:#888;">Geben Sie eine PLZ ein.</p>';
+            document.getElementById('results').innerHTML = '<p style="text-align:center; padding:30px; color:#999;">Bereit. Geben Sie eine PLZ ein.</p>';
         }
     });
 
     function drawMarkers(daten) {
         markerLayer.clearLayers();
         daten.forEach(k => {
-            const farbe = k.Zertifiziert?.toLowerCase().trim() === 'ja' ? "#ff8c00" : "#95a5a6";
+            const istZert = k.Zertifiziert?.toLowerCase().trim() === 'ja';
+            const farbe = istZert ? "#ff8c00" : "#95a5a6";
+            
             L.circleMarker([parseFloat(k.Lat), parseFloat(k.Lon)], {
-                radius: 8, fillColor: farbe, color: "#fff", weight: 2, fillOpacity: 0.9
+                radius: 9, fillColor: farbe, color: "#fff", weight: 2, fillOpacity: 0.9
             }).bindPopup(`<b>${k.Firmenname}</b><br>${k.Klinik || ''}`).addTo(markerLayer);
         });
     }
 
     async function sucheStarten() {
         const plz = document.getElementById('plzInput').value;
-        const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&postalcode=${plz}&country=germany`);
-        const data = await resp.json();
-        if (data.length > 0) {
-            const sLat = parseFloat(data[0].lat), sLon = parseFloat(data[0].lon);
-            const treffer = alleKliniken.map(k => ({...k, d: berechneDistanz(sLat, sLon, parseFloat(k.Lat), parseFloat(k.Lon))}))
-                                       .filter(k => k.d <= 20).sort((a,b) => a.d - b.d);
-            map.setView([sLat, sLon], 10);
-            drawMarkers(treffer);
-            aktualisiereListe(treffer);
-            if(window.innerWidth <= 768) document.getElementById('sidebar').scrollTop = 0;
-        }
+        if (!plz) return;
+        
+        document.getElementById('results').innerHTML = '<p style="text-align:center; padding:20px;">Suche läuft...</p>';
+        
+        try {
+            const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&postalcode=${plz}&country=germany`);
+            const data = await resp.json();
+            
+            if (data.length > 0) {
+                const sLat = parseFloat(data[0].lat), sLon = parseFloat(data[0].lon);
+                
+                const treffer = alleKliniken.map(k => ({
+                    ...k, 
+                    d: berechneDistanz(sLat, sLon, parseFloat(k.Lat), parseFloat(k.Lon))
+                })).filter(k => k.d <= 20).sort((a,b) => a.d - b.d);
+                
+                map.setView([sLat, sLon], 11);
+                drawMarkers(treffer);
+                aktualisiereListe(treffer);
+            } else {
+                alert("PLZ nicht gefunden.");
+                document.getElementById('results').innerHTML = "";
+            }
+        } catch(e) { console.error(e); }
     }
 
     function berechneDistanz(lat1, lon1, lat2, lon2) {
@@ -106,24 +147,25 @@
     }
 
     function aktualisiereListe(treffer) {
-        let html = `<p style="padding:10px;"><b>${treffer.length} Kliniken</b> gefunden:</p>`;
+        let html = `<p style="padding:15px; margin:0; border-bottom:1px solid #eee;"><b>${treffer.length} Kliniken</b> gefunden:</p>`;
         treffer.forEach(k => {
             const istZert = k.Zertifiziert?.toLowerCase().trim() === 'ja';
-            html += `<div class="clinic-card" onclick="map.setView([${k.Lat}, ${k.Lon}], 13);">
+            html += `<div class="clinic-card" onclick="map.setView([${k.Lat}, ${k.Lon}], 14);">
                 <span class="distanz-tag">${k.d.toFixed(1).replace('.',',')} km</span>
                 <b>${k.Firmenname}</b>
-                <span style="font-size:12px; color:#d35400;"><i>${k.Klinik || ''}</i></span><br>
+                <span class="klinik-info">${k.Klinik || ''}</span>
+                <span style="font-size:13px; color:#666;">${k.Ort}</span><br>
                 <span class="status-badge ${istZert ? 'zertifiziert' : 'mitglied'}">${istZert ? 'Zertifiziert' : 'Mitglied'}</span>
             </div>`;
         });
-        document.getElementById('results').innerHTML = html || '<p style="padding:20px;">Keine Kliniken gefunden.</p>';
+        document.getElementById('results').innerHTML = html || '<p style="padding:30px; text-align:center;">Keine Treffer im Umkreis.</p>';
     }
 
     function alleAnzeigen() {
         document.getElementById('plzInput').value = '';
         map.setView([51.1657, 10.4515], 6);
         drawMarkers(alleKliniken);
-        document.getElementById('results').innerHTML = '<p style="text-align:center; padding:20px; color:#888;">Alle Kliniken angezeigt.</p>';
+        document.getElementById('results').innerHTML = '<p style="text-align:center; padding:30px; color:#999;">Alle Kliniken werden angezeigt.</p>';
     }
 </script>
 </body>
