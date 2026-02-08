@@ -8,41 +8,44 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <style>
         body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; height: 100vh; display: flex; overflow: hidden; background: #f4f4f4; }
+        
+        /* Karten-Höhe auf Mobile optimiert */
         #map { flex-grow: 1; height: 100%; z-index: 1; position: absolute; top:0; left:0; right:0; bottom:0; }
 
         /* Sidebar Desktop */
         #sidebar { width: 420px; height: 100%; background: white; z-index: 1000; display: flex; flex-direction: column; box-shadow: 2px 0 10px rgba(0,0,0,0.1); position: relative; }
 
-        /* Mobile Bottom Sheet (Swipe-Up) */
+        /* Mobile Bottom Sheet (Kartenhöhe reduziert) */
         @media (max-width: 768px) {
-            #sidebar { position: absolute; bottom: 0; left: 0; right: 0; width: 100%; height: 85vh; transform: translateY(calc(85vh - 170px)); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.1); border-radius: 25px 25px 0 0; z-index: 2000; }
-            #sidebar.open { transform: translateY(0); }
-            .drag-handle { width: 45px; height: 6px; background: #ccc; border-radius: 10px; margin: 12px auto 8px auto; display: block; }
+            #map { height: 40vh; position: relative; } /* Karte nimmt nur 40% ein */
+            body { flex-direction: column; overflow: auto; }
+            #sidebar { 
+                width: 100%; height: auto; min-height: 60vh; 
+                position: relative; border-radius: 20px 20px 0 0; 
+                margin-top: -20px; box-shadow: 0 -5px 15px rgba(0,0,0,0.1);
+            }
         }
-        @media (min-width: 769px) { .drag-handle { display: none; } }
 
         /* UI Styling */
-        .search-container { background: #004a99; color: white; padding: 5px 15px 15px 15px; }
-        @media (max-width: 768px) { .search-container { border-radius: 25px 25px 0 0; } }
+        .search-container { background: #004a99; color: white; padding: 15px; }
+        @media (max-width: 768px) { .search-container { border-radius: 20px 20px 0 0; } }
         
+        h2 { margin: 0 0 10px 0; font-size: 20px; text-align: center; }
         input, select { width: 100%; padding: 12px; border-radius: 8px; border: none; font-size: 16px; margin-top: 8px; box-sizing: border-box; }
         .btn-group { display: flex; gap: 8px; margin-top: 12px; }
         .btn-primary { flex: 2; padding: 14px; background: #ff8c00; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 16px; }
-        .btn-secondary { flex: 1; padding: 14px; background: rgba(255,255,255,0.25); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; }
+        .btn-secondary { flex: 1; padding: 14px; background: rgba(255,255,255,0.25); color: white; border: none; border-radius: 8px; cursor: pointer; }
 
-        .legend-container { padding: 12px; background: #fdfdfd; border-bottom: 1px solid #eee; font-size: 12px; display: flex; justify-content: center; gap: 20px; font-weight: 500; }
-        .dot-legend { height: 12px; width: 12px; border-radius: 50%; display: inline-block; margin-right: 6px; border: 1.5px solid #555; }
+        .legend-container { padding: 10px; background: #fff; border-bottom: 1px solid #eee; font-size: 12px; display: flex; justify-content: center; gap: 20px; }
+        .dot-legend { height: 10px; width: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
 
-        #results { overflow-y: auto; background: white; flex-grow: 1; -webkit-overflow-scrolling: touch; }
-        .clinic-card { padding: 20px; border-bottom: 1px solid #f0f0f0; cursor: pointer; position: relative; transition: background 0.2s; }
-        .clinic-card:hover { background: #f9f9f9; }
+        #results { overflow-y: auto; background: white; flex-grow: 1; }
+        .clinic-card { padding: 20px; border-bottom: 1px solid #f0f0f0; cursor: pointer; position: relative; }
         .distanz-tag { position: absolute; top: 20px; right: 20px; font-size: 11px; font-weight: bold; background: #004a99; color: white; padding: 3px 8px; border-radius: 6px; }
-        
         .klinik-typ { font-size: 13px; color: #d35400; font-style: italic; display: block; margin: 4px 0; }
-        .contact-links { display: flex; gap: 15px; margin-top: 10px; }
-        .contact-link { font-size: 13px; color: #004a99; text-decoration: none; font-weight: bold; border: 1px solid #004a99; padding: 5px 10px; border-radius: 6px; }
-        
-        .status-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 10px; font-weight: bold; color: white; margin-top: 12px; text-transform: uppercase; }
+        .contact-links { display: flex; gap: 10px; margin-top: 10px; }
+        .contact-link { font-size: 12px; color: #004a99; text-decoration: none; border: 1px solid #004a99; padding: 4px 8px; border-radius: 5px; }
+        .status-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: bold; color: white; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -50,30 +53,29 @@
 <div id="map"></div>
 
 <div id="sidebar">
-    <div class="drag-handle"></div>
-    <div class="search-container" onclick="toggleMobileSheet()">
-        <h2 style="margin:0; font-size:20px; text-align:center;">Kliniksuche</h2>
-        <input type="text" id="plzInput" placeholder="PLZ eingeben..." onclick="event.stopPropagation()" inputmode="numeric">
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-            <select id="radiusInput" onclick="event.stopPropagation()">
+    <div class="search-container">
+        <h2>Kliniksuche</h2>
+        <input type="text" id="plzInput" placeholder="PLZ eingeben..." inputmode="numeric">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+            <select id="radiusInput">
                 <option value="20">20 km</option><option value="50">50 km</option>
                 <option value="100">100 km</option><option value="150">150 km</option>
             </select>
-            <select id="typInput" onclick="event.stopPropagation()">
+            <select id="typInput">
                 <option value="Alle">Alle Typen</option>
                 <option value="Geburtsklinik">Geburtsklinik</option><option value="Kinderklinik">Kinderklinik</option>
                 <option value="Neonatologie">Neonatologie</option><option value="Perinatalklinik">Perinatalklinik</option>
             </select>
         </div>
         <div class="btn-group">
-            <button class="btn-primary" onclick="event.stopPropagation(); sucheStarten()">Suchen</button>
-            <button class="btn-secondary" onclick="event.stopPropagation(); alleAnzeigen()">Reset</button>
+            <button class="btn-primary" onclick="sucheStarten()">Suchen</button>
+            <button class="btn-secondary" onclick="alleAnzeigen()">Reset</button>
         </div>
     </div>
 
     <div class="legend-container">
-        <div><span class="dot-legend" style="background: #ff8c00; border-color: #e67e00;"></span> Zertifiziert</div>
-        <div><span class="dot-legend" style="background: #95a5a6; border-color: #333;"></span> Mitglied</div>
+        <div><span class="dot-legend" style="background: #ff8c00;"></span> Zertifiziert</div>
+        <div><span class="dot-legend" style="background: #bdc3c7;"></span> Mitglied</div>
     </div>
 
     <div id="results"></div>
@@ -85,7 +87,8 @@
     let map, markerLayer, alleKliniken = [];
     const markerMap = new Map();
 
-    map = L.map('map', { zoomControl: false }).setView([51.1657, 10.4515], 6);
+    // Start-Ansicht: Ganz Deutschland (Zoom 5-6)
+    map = L.map('map', { zoomControl: false }).setView([51.1657, 10.4515], 5.5);
     L.control.zoom({ position: 'topright' }).addTo(map);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
     markerLayer = L.layerGroup().addTo(map);
@@ -112,18 +115,20 @@
         }
     });
 
-    function toggleMobileSheet() { if(window.innerWidth <= 768) document.getElementById('sidebar').classList.toggle('open'); }
-
     function drawMarkers(daten) {
         markerLayer.clearLayers(); markerMap.clear();
         daten.forEach(k => {
             const istZert = k.Zertifiziert?.toLowerCase().trim() === 'ja';
+            // Zertifizierte (Orange) sind größer (11), Mitglieder (Grau) dezenter (8)
+            const radius = istZert ? 11 : 8;
+            const farbe = istZert ? "#ff8c00" : "#bdc3c7";
+            
             const marker = L.circleMarker([parseFloat(k.Lat), parseFloat(k.Lon)], {
-                radius: 12, 
-                fillColor: istZert ? "#ff8c00" : "#95a5a6", 
-                color: istZert ? "#fff" : "#333", // Dunkler Rand für Graue Punkte für besseren Kontrast
-                weight: istZert ? 2 : 3,
-                fillOpacity: 0.9
+                radius: radius, 
+                fillColor: farbe, 
+                color: istZert ? "#fff" : "#ccc", // Hellerer Rand für Grau
+                weight: 1.5,
+                fillOpacity: 0.85
             });
             marker.bindPopup(`<b>${k.Firmenname}</b><br>${k.Klinik}`);
             marker.addTo(markerLayer);
@@ -149,7 +154,10 @@
                 map.setView([sLat, sLon], radius > 50 ? 8 : 11);
                 drawMarkers(treffer);
                 aktualisiereListe(treffer, true);
-                if(window.innerWidth <= 768) document.getElementById('sidebar').classList.add('open');
+                // Auf Mobile zur Ergebnisliste scrollen
+                if(window.innerWidth <= 768) {
+                    document.getElementById('sidebar').scrollIntoView({ behavior: 'smooth' });
+                }
             }
         } catch(e) { console.error(e); }
     }
@@ -166,18 +174,15 @@
         treffer.forEach(k => {
             const istZert = k.Zertifiziert?.toLowerCase().trim() === 'ja';
             const id = `${k.Firmenname}-${k.Ort}`;
-            
             html += `<div class="clinic-card" onclick="fokussiereKlinik(${k.Lat}, ${k.Lon}, '${id}')">
                 ${mitDistanz ? `<span class="distanz-tag">${k.d.toFixed(1).replace('.',',')} km</span>` : ''}
                 <b style="font-size:16px;">${k.Firmenname}</b>
                 <span class="klinik-typ">${k.Klinik}</span>
-                <span style="font-size:13px; color:#666; line-height:1.4;">${k.Straße}<br>${k.Postleitzahl} ${k.Ort}</span>
-                
+                <span style="font-size:13px; color:#666;">${k.Straße}<br>${k.Postleitzahl} ${k.Ort}</span>
                 <div class="contact-links">
                     ${k.Telefon ? `<a href="tel:${k.Telefon}" class="contact-link" onclick="event.stopPropagation()">📞 Anrufen</a>` : ''}
                     ${k.Webseite ? `<a href="${k.Webseite}" target="_blank" class="contact-link" onclick="event.stopPropagation()">🌐 Webseite</a>` : ''}
                 </div>
-
                 <span class="status-badge" style="background:${istZert ? '#ff8c00' : '#bdc3c7'}">${istZert ? 'Zertifiziert' : 'Mitglied'}</span>
             </div>`;
         });
@@ -185,14 +190,16 @@
     }
 
     function fokussiereKlinik(lat, lon, id) {
-        if(window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('open');
         map.setView([parseFloat(lat), parseFloat(lon)], 14);
         const m = markerMap.get(id); if(m) m.openPopup();
+        if(window.innerWidth <= 768) {
+            window.scrollTo({ top: 0, behavior: 'smooth' }); // Zurück zur Karte scrollen
+        }
     }
 
     function alleAnzeigen() {
         document.getElementById('plzInput').value = '';
-        map.setView([51.1657, 10.4515], 6);
+        map.setView([51.1657, 10.4515], 5.5);
         drawMarkers(alleKliniken);
         aktualisiereListe(alleKliniken, false);
     }
