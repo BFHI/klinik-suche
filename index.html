@@ -7,47 +7,56 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <style>
-        body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; height: 100vh; width: 100vw; display: flex; flex-direction: column; overflow: hidden; background: #fff; }
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; height: 100vh; width: 100vw; overflow: hidden; background: #eee; }
         
-        /* Karte nimmt den oberen Bereich ein */
-        #map { width: 100%; height: 45vh; z-index: 1; flex-shrink: 0; }
+        /* Karte füllt den Hintergrund */
+        #map { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
 
-        /* Sidebar/Suche ist FEST UNTEN am Bildschirm */
+        /* Sidebar / Bottom Sheet */
         #sidebar { 
-            width: 100%; 
-            height: 55vh; 
-            background: white; 
-            z-index: 1000; 
-            display: flex; 
-            flex-direction: column; 
-            box-shadow: 0 -5px 15px rgba(0,0,0,0.1);
-            border-radius: 20px 20px 0 0;
-            margin-top: -20px; /* Schiebt die Rundung leicht über die Karte */
+            position: absolute; bottom: 0; left: 0; right: 0; 
+            width: 100%; height: 85vh; 
+            background: white; z-index: 2000; 
+            display: flex; flex-direction: column; 
+            box-shadow: 0 -5px 20px rgba(0,0,0,0.2);
+            border-radius: 25px 25px 0 0;
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.1);
+            /* Start-Position: Nur der blaue Header ist sichtbar */
+            transform: translateY(calc(85vh - 160px)); 
         }
 
-        /* Desktop Anpassung */
+        /* Klasse zum Hochfahren */
+        #sidebar.open { transform: translateY(0); }
+
+        /* Desktop-Ansicht: Klassische Sidebar links */
         @media (min-width: 769px) {
-            body { flex-direction: row; }
-            #map { height: 100vh; order: 2; flex-grow: 1; }
-            #sidebar { width: 420px; height: 100vh; order: 1; border-radius: 0; margin-top: 0; }
+            body { display: flex; flex-direction: row; }
+            #sidebar { 
+                position: relative; width: 420px; height: 100vh; 
+                transform: none !important; border-radius: 0; 
+            }
+            #map { position: relative; flex-grow: 1; }
+            .drag-handle { display: none; }
         }
 
-        .search-container { background: #004a99; color: white; padding: 15px; border-radius: 20px 20px 0 0; }
-        @media (min-width: 769px) { .search-container { border-radius: 0; } }
-        
+        /* Mobile Drag-Handle */
+        .drag-handle { width: 45px; height: 5px; background: #ccc; border-radius: 10px; margin: 12px auto 8px auto; cursor: pointer; }
+
+        .search-container { background: #004a99; color: white; padding: 5px 20px 20px 20px; cursor: pointer; }
         h2 { margin: 0 0 10px 0; font-size: 20px; text-align: center; }
-        input, select { width: 100%; padding: 10px; border-radius: 8px; border: none; font-size: 16px; margin-top: 8px; box-sizing: border-box; }
+        
+        input, select { width: 100%; padding: 12px; border-radius: 8px; border: none; font-size: 16px; margin-top: 8px; box-sizing: border-box; }
         .btn-group { display: flex; gap: 8px; margin-top: 12px; }
         .btn-primary { flex: 2; padding: 12px; background: #ff8c00; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
         .btn-secondary { flex: 1; padding: 12px; background: rgba(255,255,255,0.25); color: white; border: none; border-radius: 8px; cursor: pointer; }
 
-        .legend-container { padding: 8px; background: #fff; border-bottom: 1px solid #eee; font-size: 11px; display: flex; justify-content: center; gap: 20px; }
+        .legend-container { padding: 10px; background: #fdfdfd; border-bottom: 1px solid #eee; font-size: 11px; display: flex; justify-content: center; gap: 20px; }
         .dot-legend { height: 10px; width: 10px; border-radius: 50%; display: inline-block; margin-right: 5px; }
 
-        #results { overflow-y: auto; background: white; flex-grow: 1; }
-        .clinic-card { padding: 15px; border-bottom: 1px solid #f0f0f0; cursor: pointer; }
-        .klinik-typ { font-size: 12px; color: #d35400; font-style: italic; display: block; margin: 2px 0; }
-        .status-badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: bold; color: white; margin-top: 5px; }
+        #results { overflow-y: auto; background: white; flex-grow: 1; -webkit-overflow-scrolling: touch; }
+        .clinic-card { padding: 20px; border-bottom: 1px solid #f0f0f0; cursor: pointer; }
+        .klinik-info { font-size: 13px; color: #d35400; font-style: italic; display: block; margin: 4px 0; }
+        .status-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: bold; color: white; margin-top: 8px; }
     </style>
 </head>
 <body>
@@ -55,27 +64,31 @@
 <div id="map"></div>
 
 <div id="sidebar">
-    <div class="search-container">
+    <div class="drag-handle" onclick="toggleMobileSheet()"></div>
+    <div class="search-container" onclick="toggleMobileSheet()">
         <h2>Kliniksuche</h2>
-        <input type="text" id="plzInput" placeholder="PLZ eingeben..." inputmode="numeric">
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
-            <select id="radiusInput">
+        <input type="text" id="plzInput" placeholder="PLZ eingeben..." onclick="event.stopPropagation()" inputmode="numeric">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+            <select id="radiusInput" onclick="event.stopPropagation()">
                 <option value="20">20 km</option><option value="50">50 km</option><option value="100">100 km</option>
             </select>
-            <select id="typInput">
+            <select id="typInput" onclick="event.stopPropagation()">
                 <option value="Alle">Alle Typen</option>
-                <option value="Geburtsklinik">Geburtsklinik</option><option value="Kinderklinik">Kinderklinik</option><option value="Neonatologie">Neonatologie</option><option value="Perinatalklinik">Perinatalklinik</option>
+                <option value="Geburtsklinik">Geburtsklinik</option><option value="Kinderklinik">Kinderklinik</option>
+                <option value="Neonatologie">Neonatologie</option><option value="Perinatalklinik">Perinatalklinik</option>
             </select>
         </div>
         <div class="btn-group">
-            <button class="btn-primary" onclick="sucheStarten()">Suchen</button>
-            <button class="btn-secondary" onclick="alleAnzeigen()">Reset</button>
+            <button class="btn-primary" onclick="event.stopPropagation(); sucheStarten()">Suchen</button>
+            <button class="btn-secondary" onclick="event.stopPropagation(); alleAnzeigen()">Reset</button>
         </div>
     </div>
+
     <div class="legend-container">
         <div><span class="dot-legend" style="background: #ff8c00;"></span> Zertifiziert</div>
         <div><span class="dot-legend" style="background: #bdc3c7;"></span> Mitglied</div>
     </div>
+
     <div id="results"></div>
 </div>
 
@@ -85,7 +98,6 @@
     let map, markerLayer, alleKliniken = [];
     const markerMap = new Map();
 
-    // Start-Zoom für ganz Deutschland
     map = L.map('map', { zoomControl: false }).setView([51.1657, 10.4515], 5.5);
     L.control.zoom({ position: 'topright' }).addTo(map);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
@@ -94,11 +106,12 @@
     Papa.parse(csvURL, {
         download: true, header: true, skipEmptyLines: true,
         complete: function(results) {
+            // Filtert "Limit erreicht" Zeilen aus, damit die Karte nicht abstürzt
             const data = results.data.map(row => {
                 row.Lat = row.Lat?.toString().replace(',', '.');
                 row.Lon = row.Lon?.toString().replace(',', '.');
                 return row;
-            }).filter(row => row.Lat && !isNaN(parseFloat(row.Lat))); // Filtert "Limit erreicht" Zeilen aus!
+            }).filter(row => row.Lat && !isNaN(parseFloat(row.Lat)));
 
             const unique = new Map();
             data.forEach(k => {
@@ -113,22 +126,24 @@
         }
     });
 
+    function toggleMobileSheet() {
+        if(window.innerWidth <= 768) document.getElementById('sidebar').classList.toggle('open');
+    }
+
     function drawMarkers(daten) {
         markerLayer.clearLayers(); markerMap.clear();
         daten.forEach(k => {
             const istZert = k.Zertifiziert?.toLowerCase().trim() === 'ja';
             const marker = L.circleMarker([parseFloat(k.Lat), parseFloat(k.Lon)], {
-                radius: istZert ? 11 : 7, // Mitgliedskliniken kleiner und unauffälliger
+                radius: istZert ? 11 : 7.5, 
                 fillColor: istZert ? "#ff8c00" : "#bdc3c7",
-                color: "#fff", weight: 1, fillOpacity: 0.8
+                color: "#fff", weight: 1.5, fillOpacity: 0.85
             });
 
             marker.bindPopup(`<b>${k.Firmenname}</b><br>${k.Klinik}`);
             
-            // Reparierter Hover-Effekt
-            marker.on('mouseover', function (e) {
-                this.openPopup();
-            });
+            // Hover-Effekt repariert
+            marker.on('mouseover', function() { this.openPopup(); });
 
             marker.addTo(markerLayer);
             markerMap.set(`${k.Firmenname}-${k.Ort}`, marker);
@@ -139,16 +154,23 @@
         const plz = document.getElementById('plzInput').value;
         const radius = parseInt(document.getElementById('radiusInput').value);
         if (!plz) return;
-        const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&postalcode=${plz}&country=germany`);
-        const data = await resp.json();
-        if (data.length > 0) {
-            const sLat = parseFloat(data[0].lat), sLon = parseFloat(data[0].lon);
-            let treffer = alleKliniken.map(k => ({...k, d: berechneDistanz(sLat, sLon, parseFloat(k.Lat), parseFloat(k.Lon))})).filter(k => k.d <= radius);
-            treffer.sort((a,b) => a.d - b.d);
-            map.setView([sLat, sLon], 10);
-            drawMarkers(treffer);
-            aktualisiereListe(treffer, true);
-        }
+
+        try {
+            const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&postalcode=${plz}&country=germany`);
+            const data = await resp.json();
+            if (data.length > 0) {
+                const sLat = parseFloat(data[0].lat), sLon = parseFloat(data[0].lon);
+                let treffer = alleKliniken.map(k => ({...k, d: berechneDistanz(sLat, sLon, parseFloat(k.Lat), parseFloat(k.Lon))})).filter(k => k.d <= radius);
+                treffer.sort((a,b) => a.d - b.d);
+                
+                map.setView([sLat, sLon], 11);
+                drawMarkers(treffer);
+                aktualisiereListe(treffer, true);
+                
+                // Automatisch hochfahren bei Suche am Handy
+                if(window.innerWidth <= 768) document.getElementById('sidebar').classList.add('open');
+            }
+        } catch(e) { console.error(e); }
     }
 
     function berechneDistanz(lat1, lon1, lat2, lon2) {
@@ -162,8 +184,11 @@
         let html = "";
         treffer.forEach(k => {
             const istZert = k.Zertifiziert?.toLowerCase().trim() === 'ja';
-            html += `<div class="clinic-card" onclick="map.setView([${k.Lat}, ${k.Lon}], 14)">
-                <b>${k.Firmenname}</b><span class="klinik-typ">${k.Klinik}</span>
+            const id = `${k.Firmenname}-${k.Ort}`;
+            html += `<div class="clinic-card" onclick="fokussiereKlinik(${k.Lat}, ${k.Lon}, '${id}')">
+                ${mitDistanz ? `<span style="float:right; font-size:11px; font-weight:bold; color:#004a99;">${k.d.toFixed(1).replace('.',',')} km</span>` : ''}
+                <b>${k.Firmenname}</b>
+                <span class="klinik-info">${k.Klinik}</span>
                 <span style="font-size:12px; color:#666;">${k.Straße}<br>${k.Postleitzahl} ${k.Ort}</span><br>
                 <span class="status-badge" style="background:${istZert ? '#ff8c00' : '#bdc3c7'}">${istZert ? 'Zertifiziert' : 'Mitglied'}</span>
             </div>`;
@@ -171,7 +196,15 @@
         document.getElementById('results').innerHTML = html;
     }
 
+    function fokussiereKlinik(lat, lon, id) {
+        // Am Handy Liste einklappen, um Karte zu sehen
+        if(window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('open');
+        map.setView([parseFloat(lat), parseFloat(lon)], 14);
+        const m = markerMap.get(id); if(m) m.openPopup();
+    }
+
     function alleAnzeigen() {
+        document.getElementById('plzInput').value = '';
         map.setView([51.1657, 10.4515], 5.5);
         drawMarkers(alleKliniken);
         aktualisiereListe(alleKliniken, false);
