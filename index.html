@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <style>
-        body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; height: 100vh; width: 100vw; overflow: hidden; background: #eee; }
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', Roboto, sans-serif; height: 100vh; width: 100vw; overflow: hidden; background: #eee; }
         #map { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
 
         #sidebar { 
@@ -15,10 +15,10 @@
             width: 100%; height: 85vh; 
             background: white; z-index: 2000; 
             display: flex; flex-direction: column; 
-            box-shadow: 0 -5px 20px rgba(0,0,0,0.2);
+            box-shadow: 0 -5px 25px rgba(0,0,0,0.2);
             border-radius: 25px 25px 0 0;
             transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.1);
-            transform: translateY(calc(85vh - 160px)); 
+            transform: translateY(calc(85vh - 175px)); 
         }
         #sidebar.open { transform: translateY(0); }
 
@@ -29,29 +29,33 @@
             .drag-handle { display: none; }
         }
 
-        .drag-handle { width: 45px; height: 5px; background: #ccc; border-radius: 10px; margin: 12px auto 8px auto; cursor: pointer; }
-        .search-container { background: #004a99; color: white; padding: 5px 20px 20px 20px; cursor: pointer; }
-        h2 { margin: 0 0 10px 0; font-size: 20px; text-align: center; }
+        /* Abstände & Header-Optimierung */
+        .drag-handle { width: 50px; height: 5px; background: rgba(0,0,0,0.15); border-radius: 10px; margin: 15px auto 10px auto; cursor: pointer; }
+        .search-container { background: #004a99; color: white; padding: 5px 20px 25px 20px; cursor: pointer; }
+        h2 { margin: 0 0 15px 0; font-size: 22px; text-align: center; }
         
-        input, select { width: 100%; padding: 12px; border-radius: 8px; border: none; font-size: 16px; margin-top: 8px; box-sizing: border-box; }
+        /* PLZ-Feld Fokus & Font-Size (verhindert iOS Zoom) */
+        input, select { 
+            width: 100%; padding: 12px; border-radius: 10px; border: none; 
+            font-size: 16px; margin-top: 10px; box-sizing: border-box; 
+            background: white; -webkit-appearance: none;
+        }
         
-        /* Optimierte Buttons */
-        .btn-group { display: flex; gap: 8px; margin-top: 12px; }
-        .btn-primary { flex: 2; padding: 14px; background: #ff8c00; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 18px; }
-        .btn-secondary { flex: 1; padding: 14px; background: rgba(255,255,255,0.25); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 18px; }
+        .btn-group { display: flex; gap: 10px; margin-top: 15px; }
+        .btn-primary { flex: 2; padding: 15px; background: #ff8c00; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 18px; }
+        .btn-secondary { flex: 1; padding: 15px; background: rgba(255,255,255,0.25); color: white; border: none; border-radius: 10px; cursor: pointer; font-size: 18px; }
 
-        .legend-container { padding: 10px; background: #fdfdfd; border-bottom: 1px solid #eee; font-size: 11px; display: flex; justify-content: center; gap: 20px; }
+        .legend-container { padding: 12px; background: #fafafa; border-bottom: 1px solid #eee; font-size: 12px; display: flex; justify-content: center; gap: 20px; }
         .dot-legend { height: 10px; width: 10px; border-radius: 50%; display: inline-block; margin-right: 5px; }
 
         #results { overflow-y: auto; background: white; flex-grow: 1; scroll-behavior: smooth; }
-        .clinic-card { padding: 20px; border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: background 0.3s; }
+        .clinic-card { padding: 20px; border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: background 0.2s; }
         .clinic-card.highlight { background: #fff4e6; border-left: 5px solid #ff8c00; }
         .klinik-info { font-size: 13px; color: #d35400; font-style: italic; display: block; margin: 4px 0; }
         .status-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: bold; color: white; margin-top: 8px; }
 
         .contact-row { display: flex; gap: 10px; margin-top: 12px; }
-        .btn-contact { flex: 1; text-align: center; padding: 10px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 5px; }
-        .btn-web { background: #004a99; color: white; }
+        .btn-contact { flex: 1; text-align: center; padding: 10px; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: bold; display: flex; align-items: center; justify-content: center; background: #004a99; color: white; }
     </style>
 </head>
 <body>
@@ -68,14 +72,14 @@
                 <option value="20">20 km</option><option value="50">50 km</option><option value="100">100 km</option>
             </select>
             <select id="typInput" onclick="event.stopPropagation()">
-                <option value="Alle">Einrichtungsart wählen</option>
+                <option value="Alle">Klinik-Typ</option>
                 <option value="Geburtsklinik">Geburtsklinik</option><option value="Kinderklinik">Kinderklinik</option>
                 <option value="Neonatologie">Neonatologie</option><option value="Perinatalklinik">Perinatalklinik</option>
             </select>
         </div>
         <div class="btn-group">
-            <button class="btn-primary" onclick="event.stopPropagation(); sucheStarten()">Suchen</button>
-            <button class="btn-secondary" onclick="event.stopPropagation(); alleAnzeigen()">Reset</button>
+            <button class="btn-primary" onclick="event.stopPropagation(); sucheStarten()">SUCHEN</button>
+            <button class="btn-secondary" onclick="event.stopPropagation(); alleAnzeigen()">RESET</button>
         </div>
     </div>
     <div class="legend-container">
@@ -130,7 +134,12 @@
         daten.forEach(k => {
             const istZert = k.Zertifiziert?.toLowerCase().trim() === 'ja';
             const id = `${k.Firmenname}-${k.Ort}`;
-            const marker = L.circleMarker([k.Lat, k.Lon], {
+            
+            // Marker-Cluster / Jitter Logik
+            const lat = k.Lat + (Math.random() - 0.5) * 0.006;
+            const lon = k.Lon + (Math.random() - 0.5) * 0.006;
+
+            const marker = L.circleMarker([lat, lon], {
                 radius: istZert ? 11 : 7.5, 
                 fillColor: istZert ? "#ff8c00" : "#bdc3c7",
                 color: "#fff", weight: 1.5, fillOpacity: 0.85
@@ -202,7 +211,7 @@
                 const url = k.Webseite.startsWith('http') ? k.Webseite : `https://${k.Webseite}`;
                 contactButtons = `
                     <div class="contact-row">
-                        <a href="${url}" target="_blank" class="btn-contact btn-web" onclick="event.stopPropagation()">🌐 Zur Webseite der Klinik</a>
+                        <a href="${url}" target="_blank" class="btn-contact" onclick="event.stopPropagation()">🌐 Klinik-Webseite</a>
                     </div>`;
             }
 
