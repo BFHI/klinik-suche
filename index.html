@@ -11,12 +11,17 @@
         #sidebar { width: 350px; padding: 20px; background: #fdfdfd; box-shadow: 2px 0 15px rgba(0,0,0,0.1); z-index: 1000; display: flex; flex-direction: column; }
         #map { flex-grow: 1; height: 100%; }
         
-        .search-container { background: #004a99; color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+        .search-container { background: #004a99; color: white; padding: 20px; border-radius: 10px; margin-bottom: 10px; }
         .search-container h2 { margin-top: 0; font-size: 18px; }
         
         input { width: 100%; padding: 12px; border: none; border-radius: 5px; margin-top: 10px; font-size: 16px; box-sizing: border-box; }
-        button { width: 100%; padding: 12px; background: #ff8c00; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; margin-top: 10px; font-size: 16px; transition: background 0.3s; }
-        button:hover { background: #e67e00; }
+        .btn-primary { width: 100%; padding: 12px; background: #ff8c00; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; margin-top: 10px; font-size: 16px; transition: background 0.3s; }
+        .btn-primary:hover { background: #e67e00; }
+        .btn-secondary { width: 100%; padding: 10px; background: #95a5a6; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; margin-top: 8px; font-size: 14px; }
+        
+        .legend-container { padding: 15px; background: #fff; border-bottom: 1px solid #eee; font-size: 13px; color: #333; }
+        .legend-item { display: flex; align-items: center; margin-top: 5px; }
+        .dot { height: 12px; width: 12px; border-radius: 50%; display: inline-block; margin-right: 8px; }
         
         #results { overflow-y: auto; flex-grow: 1; }
         .clinic-card { padding: 15px; border-bottom: 1px solid #eee; cursor: pointer; transition: background 0.2s; }
@@ -35,10 +40,18 @@
 <div id="sidebar">
     <div class="search-container">
         <h2>Klinik-Suche</h2>
-        <p style="font-size: 13px; margin: 0;">Geben Sie Ihre PLZ ein, um Kliniken im Umkreis von 20 km zu finden.</p>
+        <p style="font-size: 13px; margin: 0;">PLZ eingeben für 20 km Umkreis-Suche.</p>
         <input type="text" id="plzInput" placeholder="z.B. 50667" maxlength="5">
-        <button onclick="sucheStarten()">Kliniken finden</button>
+        <button class="btn-primary" onclick="sucheStarten()">Kliniken finden</button>
+        <button class="btn-secondary" onclick="alleAnzeigen()">Alle anzeigen</button>
     </div>
+
+    <div class="legend-container">
+        <strong>Farblegende:</strong>
+        <div class="legend-item"><span class="dot" style="background: #ff8c00;"></span> Zertifizierte Kliniken</div>
+        <div class="legend-item"><span class="dot" style="background: #95a5a6;"></span> Mitglieder (in Zertifizierung)</div>
+    </div>
+
     <div id="results">
         <div class="loading">Daten werden geladen...</div>
     </div>
@@ -62,15 +75,13 @@
     
     markerLayer = L.layerGroup().addTo(map);
 
-    // 2. Daten laden mit PapaParse
+    // 2. Daten laden und bereinigen
     Papa.parse(csvURL, {
         download: true,
         header: true,
         skipEmptyLines: true,
         complete: function(results) {
-            console.log("Rohdaten:", results.data); // Zur Kontrolle in der Browser-Konsole
-            
-            // Daten bereinigen: Kommas zu Punkten und ungültige Zeilen filtern
+            // Wir wandeln Kommas in Punkte um, falls welche da sind
             alleKliniken = results.data.map(row => {
                 if(row.Lat) row.Lat = row.Lat.toString().replace(',', '.');
                 if(row.Lon) row.Lon = row.Lon.toString().replace(',', '.');
@@ -81,17 +92,17 @@
 
             if(alleKliniken.length > 0) {
                 drawMarkers(alleKliniken);
-                document.getElementById('results').innerHTML = '<p style="text-align:center; color:#888;">Bereit. Geben Sie eine PLZ ein.</p>';
+                document.getElementById('results').innerHTML = '<p style="text-align:center; color:#888; margin-top:20px;">Geben Sie eine PLZ ein.</p>';
             } else {
-                document.getElementById('results').innerHTML = '<p style="color:red;">Keine gültigen Geodaten gefunden. Prüfen Sie die Spalten Lat und Lon.</p>';
+                document.getElementById('results').innerHTML = '<p style="color:red; padding:10px;">Keine gültigen Geodaten gefunden.</p>';
             }
         },
         error: function(err) {
-            document.getElementById('results').innerHTML = '<p style="color:red;">Fehler beim Laden der CSV-Datei.</p>';
+            document.getElementById('results').innerHTML = '<p style="color:red; padding:10px;">Fehler beim Laden der CSV-Datei.</p>';
         }
     });
 
-    // 3. Marker zeichnen (Spaltennamen angepasst an dein Sheet)
+    // 3. Marker zeichnen
     function drawMarkers(daten) {
         markerLayer.clearLayers();
         daten.forEach(k => {
@@ -108,7 +119,7 @@
                 weight: 2,
                 fillOpacity: 0.9
             }).bindPopup(`
-                <b>${k.Firmenname || 'Unbekannte Klinik'}</b><br>
+                <b>${k.Firmenname || 'Klinik'}</b><br>
                 ${k.Straße || ''}<br>
                 ${k.Postleitzahl || ''} ${k.Ort || ''}<br>
                 <span class="status-badge ${istZert ? 'zertifiziert' : 'mitglied'}">
@@ -124,7 +135,7 @@
         const plz = document.getElementById('plzInput').value;
         if (!plz || plz.length < 3) return;
 
-        document.getElementById('results').innerHTML = 'Suche läuft...';
+        document.getElementById('results').innerHTML = '<div class="loading">Suche läuft...</div>';
 
         try {
             const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&postalcode=${plz}&country=germany`);
@@ -142,38 +153,17 @@
                 drawMarkers(treffer);
                 aktualisiereListe(treffer);
             } else {
-                alert("PLZ nicht gefunden.");
+                alert("PLZ wurde nicht gefunden.");
+                document.getElementById('results').innerHTML = "";
             }
         } catch (e) {
             console.error(e);
         }
     }
 
-    function berechneEntfernung(lat1, lon1, lat2, lon2) {
-        const R = 6371; 
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = (lon2 - lon1) * Math.PI / 180;
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
-        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    }
-
-    function aktualisiereListe(treffer) {
-        let html = `<p><b>${treffer.length} Kliniken</b> gefunden:</p>`;
-        treffer.forEach(k => {
-            const istZert = k.Zertifiziert && k.Zertifiziert.toLowerCase().trim() === 'ja';
-            html += `
-                <div class="clinic-card" onclick="map.panTo([${k.Lat}, ${k.Lon}])">
-                    <b>${k.Firmenname}</b>
-                    ${k.Ort}<br>
-                    <span class="status-badge ${istZert ? 'zertifiziert' : 'mitglied'}">
-                        ${istZert ? 'Zertifiziert' : 'Mitglied'}
-                    </span>
-                </div>`;
-        });
-        document.getElementById('results').innerHTML = html;
-    }
-</script>
-
-</body>
-</html>
+    // 5. Zurücksetzen Funktion (Alle anzeigen)
+    function alleAnzeigen() {
+        document.getElementById('plzInput').value = '';
+        map.setView([51.1657, 10.4515], 6);
+        drawMarkers(alleKliniken);
+        document.getElementById('results').innerHTML = '<p style="text-align:center; color:#888; margin-top:20px;">Geben Sie eine PLZ ein
