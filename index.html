@@ -57,6 +57,16 @@
         .clinic-card { padding: 20px; border-bottom: 1px solid #f0f0f0; cursor: pointer; }
         .klinik-info { font-size: 13px; color: #d35400; font-style: italic; display: block; margin: 4px 0; }
         .status-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: bold; color: white; margin-top: 8px; }
+
+        /* NEU: Kontakt-Buttons Styling */
+        .contact-row { display: flex; gap: 10px; margin-top: 12px; }
+        .btn-contact { 
+            flex: 1; text-align: center; padding: 8px; border-radius: 6px; 
+            text-decoration: none; font-size: 12px; font-weight: bold; 
+            display: flex; align-items: center; justify-content: center; gap: 5px;
+        }
+        .btn-phone { background: #e8f0f8; color: #004a99; border: 1px solid #004a99; }
+        .btn-web { background: #004a99; color: white; }
     </style>
 </head>
 <body>
@@ -106,12 +116,14 @@
     Papa.parse(csvURL, {
         download: true, header: true, skipEmptyLines: true,
         complete: function(results) {
-            // Filtert "Limit erreicht" Zeilen aus, damit die Karte nicht abstürzt
+            // Optimierte Datenbereinigung für Koordinaten
             const data = results.data.map(row => {
-                row.Lat = row.Lat?.toString().replace(',', '.');
-                row.Lon = row.Lon?.toString().replace(',', '.');
+                const latVal = row.Lat?.toString().replace(',', '.');
+                const lonVal = row.Lon?.toString().replace(',', '.');
+                row.Lat = parseFloat(latVal);
+                row.Lon = parseFloat(lonVal);
                 return row;
-            }).filter(row => row.Lat && !isNaN(parseFloat(row.Lat)));
+            }).filter(row => !isNaN(row.Lat) && !isNaN(row.Lon)); // Filtert "Limit erreicht" Strings aus
 
             const unique = new Map();
             data.forEach(k => {
@@ -134,15 +146,13 @@
         markerLayer.clearLayers(); markerMap.clear();
         daten.forEach(k => {
             const istZert = k.Zertifiziert?.toLowerCase().trim() === 'ja';
-            const marker = L.circleMarker([parseFloat(k.Lat), parseFloat(k.Lon)], {
+            const marker = L.circleMarker([k.Lat, k.Lon], {
                 radius: istZert ? 11 : 7.5, 
                 fillColor: istZert ? "#ff8c00" : "#bdc3c7",
                 color: "#fff", weight: 1.5, fillOpacity: 0.85
             });
 
             marker.bindPopup(`<b>${k.Firmenname}</b><br>${k.Klinik}`);
-            
-            // Hover-Effekt repariert
             marker.on('mouseover', function() { this.openPopup(); });
 
             marker.addTo(markerLayer);
@@ -153,6 +163,7 @@
     async function sucheStarten() {
         const plz = document.getElementById('plzInput').value;
         const radius = parseInt(document.getElementById('radiusInput').value);
+        const typ = document.getElementById('typInput').value;
         if (!plz) return;
 
         try {
@@ -160,14 +171,22 @@
             const data = await resp.json();
             if (data.length > 0) {
                 const sLat = parseFloat(data[0].lat), sLon = parseFloat(data[0].lon);
-                let treffer = alleKliniken.map(k => ({...k, d: berechneDistanz(sLat, sLon, parseFloat(k.Lat), parseFloat(k.Lon))})).filter(k => k.d <= radius);
+                
+                let treffer = alleKliniken.map(k => ({
+                    ...k, 
+                    d: berechneDistanz(sLat, sLon, k.Lat, k.Lon)
+                })).filter(k => {
+                    const passendRadius = k.d <= radius;
+                    const passendTyp = typ === "Alle" || k.Klinik.includes(typ);
+                    return passendRadius && passendTyp;
+                });
+
                 treffer.sort((a,b) => a.d - b.d);
                 
-                map.setView([sLat, sLon], 11);
+                map.setView([sLat, sLon], 10);
                 drawMarkers(treffer);
                 aktualisiereListe(treffer, true);
                 
-                // Automatisch hochfahren bei Suche am Handy
                 if(window.innerWidth <= 768) document.getElementById('sidebar').classList.add('open');
             }
         } catch(e) { console.error(e); }
@@ -185,26 +204,45 @@
         treffer.forEach(k => {
             const istZert = k.Zertifiziert?.toLowerCase().trim() === 'ja';
             const id = `${k.Firmenname}-${k.Ort}`;
+            
+            // NEU: Bedingte Buttons
+            let contactButtons = "";
+            const hasPhone = k.Telefon && k.Telefon.trim() !== "";
+            const hasWeb = k.Webseite && k.Webseite.trim() !== "";
+
+            if (hasPhone || hasWeb) {
+                contactButtons = `<div class="contact-row">`;
+                if (hasPhone) {
+                    contactButtons += `<a href="tel:${k.Telefon}" class="btn-contact btn-phone" onclick="event.stopPropagation()">📞 Anrufen</a>`;
+                }
+                if (hasWeb) {
+                    const url = k.Webseite.startsWith('http') ? k.Webseite : `https://${k.Webseite}`;
+                    contactButtons += `<a href="${url}" target="_blank" class="btn-contact btn-web" onclick="event.stopPropagation()">🌐 Website</a>`;
+                }
+                contactButtons += `</div>`;
+            }
+
             html += `<div class="clinic-card" onclick="fokussiereKlinik(${k.Lat}, ${k.Lon}, '${id}')">
                 ${mitDistanz ? `<span style="float:right; font-size:11px; font-weight:bold; color:#004a99;">${k.d.toFixed(1).replace('.',',')} km</span>` : ''}
                 <b>${k.Firmenname}</b>
                 <span class="klinik-info">${k.Klinik}</span>
                 <span style="font-size:12px; color:#666;">${k.Straße}<br>${k.Postleitzahl} ${k.Ort}</span><br>
                 <span class="status-badge" style="background:${istZert ? '#ff8c00' : '#bdc3c7'}">${istZert ? 'Zertifiziert' : 'Mitglied'}</span>
+                ${contactButtons}
             </div>`;
         });
-        document.getElementById('results').innerHTML = html;
+        document.getElementById('results').innerHTML = html || `<div style="padding:20px; text-align:center;">Keine Kliniken gefunden.</div>`;
     }
 
     function fokussiereKlinik(lat, lon, id) {
-        // Am Handy Liste einklappen, um Karte zu sehen
         if(window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('open');
-        map.setView([parseFloat(lat), parseFloat(lon)], 14);
+        map.setView([lat, lon], 14);
         const m = markerMap.get(id); if(m) m.openPopup();
     }
 
     function alleAnzeigen() {
         document.getElementById('plzInput').value = '';
+        document.getElementById('typInput').value = 'Alle';
         map.setView([51.1657, 10.4515], 5.5);
         drawMarkers(alleKliniken);
         aktualisiereListe(alleKliniken, false);
