@@ -8,11 +8,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <style>
         body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; height: 100vh; width: 100vw; overflow: hidden; background: #eee; }
-        
-        /* Karte füllt den Hintergrund */
         #map { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
 
-        /* Sidebar / Bottom Sheet */
         #sidebar { 
             position: absolute; bottom: 0; left: 0; right: 0; 
             width: 100%; height: 85vh; 
@@ -21,27 +18,18 @@
             box-shadow: 0 -5px 20px rgba(0,0,0,0.2);
             border-radius: 25px 25px 0 0;
             transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.1);
-            /* Start-Position: Nur der blaue Header ist sichtbar */
             transform: translateY(calc(85vh - 160px)); 
         }
-
-        /* Klasse zum Hochfahren */
         #sidebar.open { transform: translateY(0); }
 
-        /* Desktop-Ansicht: Klassische Sidebar links */
         @media (min-width: 769px) {
             body { display: flex; flex-direction: row; }
-            #sidebar { 
-                position: relative; width: 420px; height: 100vh; 
-                transform: none !important; border-radius: 0; 
-            }
+            #sidebar { position: relative; width: 420px; height: 100vh; transform: none !important; border-radius: 0; }
             #map { position: relative; flex-grow: 1; }
             .drag-handle { display: none; }
         }
 
-        /* Mobile Drag-Handle */
         .drag-handle { width: 45px; height: 5px; background: #ccc; border-radius: 10px; margin: 12px auto 8px auto; cursor: pointer; }
-
         .search-container { background: #004a99; color: white; padding: 5px 20px 20px 20px; cursor: pointer; }
         h2 { margin: 0 0 10px 0; font-size: 20px; text-align: center; }
         
@@ -53,18 +41,14 @@
         .legend-container { padding: 10px; background: #fdfdfd; border-bottom: 1px solid #eee; font-size: 11px; display: flex; justify-content: center; gap: 20px; }
         .dot-legend { height: 10px; width: 10px; border-radius: 50%; display: inline-block; margin-right: 5px; }
 
-        #results { overflow-y: auto; background: white; flex-grow: 1; -webkit-overflow-scrolling: touch; }
-        .clinic-card { padding: 20px; border-bottom: 1px solid #f0f0f0; cursor: pointer; }
+        #results { overflow-y: auto; background: white; flex-grow: 1; scroll-behavior: smooth; }
+        .clinic-card { padding: 20px; border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: background 0.3s; }
+        .clinic-card.highlight { background: #fff4e6; }
         .klinik-info { font-size: 13px; color: #d35400; font-style: italic; display: block; margin: 4px 0; }
         .status-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: bold; color: white; margin-top: 8px; }
 
-        /* NEU: Kontakt-Buttons Styling */
         .contact-row { display: flex; gap: 10px; margin-top: 12px; }
-        .btn-contact { 
-            flex: 1; text-align: center; padding: 8px; border-radius: 6px; 
-            text-decoration: none; font-size: 12px; font-weight: bold; 
-            display: flex; align-items: center; justify-content: center; gap: 5px;
-        }
+        .btn-contact { flex: 1; text-align: center; padding: 8px; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 5px; }
         .btn-phone { background: #e8f0f8; color: #004a99; border: 1px solid #004a99; }
         .btn-web { background: #004a99; color: white; }
     </style>
@@ -93,12 +77,10 @@
             <button class="btn-secondary" onclick="event.stopPropagation(); alleAnzeigen()">Reset</button>
         </div>
     </div>
-
     <div class="legend-container">
         <div><span class="dot-legend" style="background: #ff8c00;"></span> Zertifiziert</div>
         <div><span class="dot-legend" style="background: #bdc3c7;"></span> Mitglied</div>
     </div>
-
     <div id="results"></div>
 </div>
 
@@ -108,7 +90,7 @@
     let map, markerLayer, alleKliniken = [];
     const markerMap = new Map();
 
-    map = L.map('map', { zoomControl: false }).setView([51.1657, 10.4515], 5.5);
+    map = L.map('map', { zoomControl: false }).setView([51.1657, 10.4515], 6);
     L.control.zoom({ position: 'topright' }).addTo(map);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
     markerLayer = L.layerGroup().addTo(map);
@@ -116,21 +98,25 @@
     Papa.parse(csvURL, {
         download: true, header: true, skipEmptyLines: true,
         complete: function(results) {
-            // Optimierte Datenbereinigung für Koordinaten
-            const data = results.data.map(row => {
-                const latVal = row.Lat?.toString().replace(',', '.');
-                const lonVal = row.Lon?.toString().replace(',', '.');
-                row.Lat = parseFloat(latVal);
-                row.Lon = parseFloat(lonVal);
+            const rawData = results.data.map(row => {
+                row.Lat = parseFloat(row.Lat?.toString().replace(',', '.'));
+                row.Lon = parseFloat(row.Lon?.toString().replace(',', '.'));
                 return row;
-            }).filter(row => !isNaN(row.Lat) && !isNaN(row.Lon)); // Filtert "Limit erreicht" Strings aus
+            }).filter(row => !isNaN(row.Lat) && !isNaN(row.Lon));
 
             const unique = new Map();
-            data.forEach(k => {
+            rawData.forEach(k => {
                 const id = `${k.Firmenname}-${k.Ort}`;
                 if (unique.has(id)) {
-                    if (!unique.get(id).Klinik.includes(k.Klinik)) unique.get(id).Klinik += " & " + k.Klinik;
-                } else { unique.set(id, {...k}); }
+                    // Falls die Klinik schon da ist, hängen wir den neuen Typ einfach an den String an
+                    if (!unique.get(id).Klinik.includes(k.Klinik)) {
+                        unique.get(id).Klinik += " & " + k.Klinik;
+                    }
+                    // Wenn eine der Zeilen "Ja" bei Zertifiziert hat, gilt der Standort als zertifiziert
+                    if (k.Zertifiziert?.toLowerCase().trim() === 'ja') unique.get(id).Zertifiziert = 'Ja';
+                } else {
+                    unique.set(id, {...k});
+                }
             });
             alleKliniken = Array.from(unique.values()).sort((a,b) => a.Ort.localeCompare(b.Ort));
             drawMarkers(alleKliniken);
@@ -146,18 +132,28 @@
         markerLayer.clearLayers(); markerMap.clear();
         daten.forEach(k => {
             const istZert = k.Zertifiziert?.toLowerCase().trim() === 'ja';
+            const id = `${k.Firmenname}-${k.Ort}`;
             const marker = L.circleMarker([k.Lat, k.Lon], {
                 radius: istZert ? 11 : 7.5, 
                 fillColor: istZert ? "#ff8c00" : "#bdc3c7",
                 color: "#fff", weight: 1.5, fillOpacity: 0.85
             });
 
-            marker.bindPopup(`<b>${k.Firmenname}</b><br>${k.Klinik}`);
-            marker.on('mouseover', function() { this.openPopup(); });
-
+            // Klick auf Marker öffnet Info in der Liste
+            marker.on('click', () => highlightInList(id));
             marker.addTo(markerLayer);
-            markerMap.set(`${k.Firmenname}-${k.Ort}`, marker);
+            markerMap.set(id, marker);
         });
+    }
+
+    function highlightInList(id) {
+        const element = document.getElementById('card-' + id);
+        if (element) {
+            if(window.innerWidth <= 768) document.getElementById('sidebar').classList.add('open');
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            element.classList.add('highlight');
+            setTimeout(() => element.classList.remove('highlight'), 2000);
+        }
     }
 
     async function sucheStarten() {
@@ -171,22 +167,17 @@
             const data = await resp.json();
             if (data.length > 0) {
                 const sLat = parseFloat(data[0].lat), sLon = parseFloat(data[0].lon);
-                
-                let treffer = alleKliniken.map(k => ({
-                    ...k, 
-                    d: berechneDistanz(sLat, sLon, k.Lat, k.Lon)
-                })).filter(k => {
+                let treffer = alleKliniken.map(k => ({...k, d: berechneDistanz(sLat, sLon, k.Lat, k.Lon)}))
+                .filter(k => {
                     const passendRadius = k.d <= radius;
-                    const passendTyp = typ === "Alle" || k.Klinik.includes(typ);
+                    // Filtert nun auch in zusammengeführten Namen (z.B. "Geburtsklinik & Kinderklinik")
+                    const passendTyp = typ === "Alle" || k.Klinik.toLowerCase().includes(typ.toLowerCase());
                     return passendRadius && passendTyp;
-                });
-
-                treffer.sort((a,b) => a.d - b.d);
+                }).sort((a,b) => a.d - b.d);
                 
                 map.setView([sLat, sLon], 10);
                 drawMarkers(treffer);
                 aktualisiereListe(treffer, true);
-                
                 if(window.innerWidth <= 768) document.getElementById('sidebar').classList.add('open');
             }
         } catch(e) { console.error(e); }
@@ -204,25 +195,18 @@
         treffer.forEach(k => {
             const istZert = k.Zertifiziert?.toLowerCase().trim() === 'ja';
             const id = `${k.Firmenname}-${k.Ort}`;
-            
-            // NEU: Bedingte Buttons
             let contactButtons = "";
-            const hasPhone = k.Telefon && k.Telefon.trim() !== "";
-            const hasWeb = k.Webseite && k.Webseite.trim() !== "";
-
-            if (hasPhone || hasWeb) {
+            if (k.Telefon || k.Webseite) {
                 contactButtons = `<div class="contact-row">`;
-                if (hasPhone) {
-                    contactButtons += `<a href="tel:${k.Telefon}" class="btn-contact btn-phone" onclick="event.stopPropagation()">📞 Anrufen</a>`;
-                }
-                if (hasWeb) {
+                if (k.Telefon) contactButtons += `<a href="tel:${k.Telefon}" class="btn-contact btn-phone" onclick="event.stopPropagation()">📞 Anrufen</a>`;
+                if (k.Webseite) {
                     const url = k.Webseite.startsWith('http') ? k.Webseite : `https://${k.Webseite}`;
                     contactButtons += `<a href="${url}" target="_blank" class="btn-contact btn-web" onclick="event.stopPropagation()">🌐 Website</a>`;
                 }
                 contactButtons += `</div>`;
             }
 
-            html += `<div class="clinic-card" onclick="fokussiereKlinik(${k.Lat}, ${k.Lon}, '${id}')">
+            html += `<div class="clinic-card" id="card-${id}" onclick="fokussiereKlinik(${k.Lat}, ${k.Lon}, '${id}')">
                 ${mitDistanz ? `<span style="float:right; font-size:11px; font-weight:bold; color:#004a99;">${k.d.toFixed(1).replace('.',',')} km</span>` : ''}
                 <b>${k.Firmenname}</b>
                 <span class="klinik-info">${k.Klinik}</span>
@@ -243,7 +227,7 @@
     function alleAnzeigen() {
         document.getElementById('plzInput').value = '';
         document.getElementById('typInput').value = 'Alle';
-        map.setView([51.1657, 10.4515], 5.5);
+        map.setView([51.1657, 10.4515], 6);
         drawMarkers(alleKliniken);
         aktualisiereListe(alleKliniken, false);
     }
