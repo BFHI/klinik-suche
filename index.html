@@ -35,7 +35,7 @@
         .zertifiziert { background: #ff8c00; color: white; }
         .mitglied { background: #bdc3c7; color: white; }
         
-        .loading { text-align: center; color: #666; margin-top: 20px; }
+        .loading { text-align: center; color: #666; margin-top: 20px; padding: 10px; }
     </style>
 </head>
 <body>
@@ -44,7 +44,7 @@
     <div class="search-container">
         <h2>Klinik-Suche</h2>
         <p style="font-size: 13px; margin: 0;">PLZ eingeben für 20 km Umkreis-Suche.</p>
-        <input type="text" id="plzInput" placeholder="z.B. 50667" maxlength="5">
+        <input type="text" id="plzInput" placeholder="z.B. 46149" maxlength="5">
         <button class="btn-primary" onclick="sucheStarten()">Kliniken finden</button>
         <button class="btn-secondary" onclick="alleAnzeigen()">Alle anzeigen</button>
     </div>
@@ -56,7 +56,7 @@
     </div>
 
     <div id="results">
-        <div class="loading">Daten werden geladen...</div>
+        <div class="loading" id="statusMessage">Lade Kliniken aus der Datenbank...</div>
     </div>
 </div>
 
@@ -69,27 +69,43 @@
     const csvURL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQM3LZvdiFjWWIQm59jiSDPb_F3lhEEFjqhrPwob_H1_zMp_ohPORfxuzlMo69tjyDw44UwDigevftu/pub?gid=0&single=true&output=csv';
 
     let map, markerLayer, alleKliniken = [];
-    let letzteSucheLat, letzteSucheLon;
+    let letzteSucheLat = null;
+    let letzteSucheLon = null;
 
     // 1. Karte initialisieren
     map = L.map('map').setView([51.1657, 10.4515], 6);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
+        attribution: '&copy; OpenStreetMap Mitwirkende' 
+    }).addTo(map);
     markerLayer = L.layerGroup().addTo(map);
 
-    // 2. Daten laden
+    // 2. Daten laden (Mit Fehlerbehandlung für CORS/Ladefehler)
     Papa.parse(csvURL, {
         download: true,
         header: true,
         skipEmptyLines: true,
         complete: function(results) {
+            console.log("Daten erfolgreich empfangen:", results.data.length, "Zeilen");
+            
+            // Daten bereinigen (Punkte statt Kommas erzwingen)
             alleKliniken = results.data.map(row => {
                 if(row.Lat) row.Lat = row.Lat.toString().replace(',', '.');
                 if(row.Lon) row.Lon = row.Lon.toString().replace(',', '.');
                 return row;
-            }).filter(row => row.Lat && row.Lon && !isNaN(parseFloat(row.Lat)));
+            }).filter(row => {
+                return row.Lat && row.Lon && !isNaN(parseFloat(row.Lat)) && !isNaN(parseFloat(row.Lon));
+            });
 
-            drawMarkers(alleKliniken);
-            document.getElementById('results').innerHTML = '<p style="text-align:center; color:#888; margin-top:20px;">Geben Sie eine PLZ ein.</p>';
+            if(alleKliniken.length > 0) {
+                drawMarkers(alleKliniken);
+                document.getElementById('results').innerHTML = '<p style="text-align:center; color:#888; margin-top:20px;">Bereit für die Suche. Geben Sie eine PLZ ein.</p>';
+            } else {
+                document.getElementById('results').innerHTML = '<p style="color:red; padding:10px;">Daten geladen, aber keine gültigen Koordinaten gefunden. Bitte Google Sheet prüfen.</p>';
+            }
+        },
+        error: function(err) {
+            console.error("PapaParse Fehler:", err);
+            document.getElementById('results').innerHTML = '<p style="color:red; padding:10px;"><b>Fehler:</b> Die Kliniken konnten nicht geladen werden.<br><br>Dies liegt meist an der Sicherheitsblockierung Ihres Browsers (CORS). Bitte laden Sie die Datei auf einen Webserver (z.B. GitHub Pages) hoch.</p>';
         }
     });
 
@@ -99,19 +115,32 @@
         daten.forEach(k => {
             const istZert = k.Zertifiziert && k.Zertifiziert.toLowerCase().trim() === 'ja';
             const farbe = istZert ? "#ff8c00" : "#95a5a6"; 
+            
             const marker = L.circleMarker([parseFloat(k.Lat), parseFloat(k.Lon)], {
-                radius: 9, fillColor: farbe, color: "#fff", weight: 2, fillOpacity: 0.9
+                radius: 9, 
+                fillColor: farbe, 
+                color: "#fff", 
+                weight: 2, 
+                fillOpacity: 0.9
             }).bindPopup(`<b>${k.Firmenname}</b><br>${k.Klinik || ''}<br>${k.Postleitzahl} ${k.Ort}`);
             markerLayer.addLayer(marker);
         });
     }
 
-    // 4. PLZ Suche mit Entfernungsberechnung
+    // 4. PLZ Suche
     async function sucheStarten() {
         const plz = document.getElementById('plzInput').value;
-        if (!plz || plz.length < 3) return;
+        if (!plz || plz.length < 3) {
+            alert("Bitte geben Sie eine gültige PLZ ein.");
+            return;
+        }
 
-        document.getElementById('results').innerHTML = '<div class="loading">Suche läuft...</div>';
+        if (alleKliniken.length === 0) {
+            alert("Die Datenbank ist noch nicht geladen. Bitte warten Sie einen Moment.");
+            return;
+        }
+
+        document.getElementById('results').innerHTML = '<div class="loading">Suche Standort...</div>';
 
         try {
             const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&postalcode=${plz}&country=germany`);
@@ -121,32 +150,39 @@
                 letzteSucheLat = parseFloat(data[0].lat);
                 letzteSucheLon = parseFloat(data[0].lon);
                 
-                // Berechne Distanz für alle und filtere
+                // Entfernungen berechnen und filtern
                 const treffer = alleKliniken.map(k => {
                     const d = berechneEntfernung(letzteSucheLat, letzteSucheLon, parseFloat(k.Lat), parseFloat(k.Lon));
-                    return { ...k, distanz: d };
-                }).filter(k => k.distanz <= 20);
+                    return { ...k, aktuelleDistanz: d };
+                }).filter(k => k.aktuelleDistanz <= 20);
 
-                // Sortieren: Nächste zuerst
-                treffer.sort((a, b) => a.distanz - b.distanz);
+                // Sortieren nach Distanz
+                treffer.sort((a, b) => a.aktuelleDistanz - b.aktuelleDistanz);
 
                 map.setView([letzteSucheLat, letzteSucheLon], 10);
                 drawMarkers(treffer);
                 aktualisiereListe(treffer);
             } else {
-                alert("PLZ nicht gefunden.");
-                document.getElementById('results').innerHTML = "";
+                alert("Diese PLZ konnte nicht gefunden werden.");
+                document.getElementById('results').innerHTML = '<p style="text-align:center; padding:10px;">PLZ unbekannt.</p>';
             }
-        } catch (e) { console.error(e); }
+        } catch (e) { 
+            console.error("Nominatim Fehler:", e);
+            alert("Such-Dienst aktuell nicht erreichbar.");
+        }
     }
 
+    // Zurücksetzen
     function alleAnzeigen() {
         document.getElementById('plzInput').value = '';
+        letzteSucheLat = null;
+        letzteSucheLon = null;
         map.setView([51.1657, 10.4515], 6);
         drawMarkers(alleKliniken);
-        document.getElementById('results').innerHTML = '<p style="text-align:center; color:#888; margin-top:20px;">Alle Kliniken angezeigt.</p>';
+        document.getElementById('results').innerHTML = '<p style="text-align:center; color:#888; margin-top:20px;">Alle Kliniken werden angezeigt.</p>';
     }
 
+    // Mathematische Distanz (Luftlinie)
     function berechneEntfernung(lat1, lon1, lat2, lon2) {
         const R = 6371; 
         const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -155,23 +191,30 @@
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     }
 
+    // Liste aktualisieren
     function aktualisiereListe(treffer) {
-        let html = `<p style="padding:10px;"><b>${treffer.length} Kliniken</b> gefunden:</p>`;
-        treffer.forEach(k => {
-            const istZert = k.Zertifiziert && k.Zertifiziert.toLowerCase().trim() === 'ja';
-            const distanzText = k.distanz.toFixed(1).replace('.', ',') + " km";
-            html += `
-                <div class="clinic-card" onclick="map.panTo([${k.Lat}, ${k.Lon}]);">
-                    <span class="distanz-tag">${distanzText}</span>
-                    <b>${k.Firmenname}</b>
-                    <span class="klinik-typ">${k.Klinik || ''}</span>
-                    <span style="font-size:13px;">${k.Ort}</span><br>
-                    <span class="status-badge ${istZert ? 'zertifiziert' : 'mitglied'}">
-                        ${istZert ? 'Zertifiziert' : 'Mitglied'}
-                    </span>
-                </div>`;
-        });
-        document.getElementById('results').innerHTML = html || '<p style="padding:20px;">Keine Kliniken im Umkreis.</p>';
+        let html = `<p style="padding:10px; margin-bottom:0;"><b>${treffer.length} Kliniken</b> im Umkreis gefunden:</p>`;
+        
+        if(treffer.length === 0) {
+            html = '<p style="padding:20px; text-align:center;">Keine Kliniken im Umkreis von 20 km gefunden.</p>';
+        } else {
+            treffer.forEach(k => {
+                const istZert = k.Zertifiziert && k.Zertifiziert.toLowerCase().trim() === 'ja';
+                const distanzText = k.aktuelleDistanz.toFixed(1).replace('.', ',') + " km";
+                
+                html += `
+                    <div class="clinic-card" onclick="map.setView([${k.Lat}, ${k.Lon}], 13);">
+                        <span class="distanz-tag">${distanzText}</span>
+                        <b>${k.Firmenname}</b>
+                        <span class="klinik-typ">${k.Klinik || 'Klinik'}</span>
+                        <span style="font-size:13px;">${k.Ort}</span><br>
+                        <span class="status-badge ${istZert ? 'zertifiziert' : 'mitglied'}">
+                            ${istZert ? 'Zertifiziert' : 'Mitglied'}
+                        </span>
+                    </div>`;
+            });
+        }
+        document.getElementById('results').innerHTML = html;
     }
 </script>
 </body>
