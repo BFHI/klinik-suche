@@ -29,12 +29,10 @@
             .drag-handle { display: none; }
         }
 
-        /* Abstände & Header-Optimierung */
         .drag-handle { width: 50px; height: 5px; background: rgba(0,0,0,0.15); border-radius: 10px; margin: 15px auto 10px auto; cursor: pointer; }
         .search-container { background: #004a99; color: white; padding: 5px 20px 25px 20px; cursor: pointer; }
         h2 { margin: 0 0 15px 0; font-size: 22px; text-align: center; }
         
-        /* PLZ-Feld Fokus & Font-Size (verhindert iOS Zoom) */
         input, select { 
             width: 100%; padding: 12px; border-radius: 10px; border: none; 
             font-size: 16px; margin-top: 10px; box-sizing: border-box; 
@@ -84,7 +82,7 @@
     </div>
     <div class="legend-container">
         <div><span class="dot-legend" style="background: #ff8c00;"></span> Zertifiziert</div>
-        <div><span class="dot-legend" style="background: #bdc3c7;"></span> Mitglied</div>
+        <div><span class="dot-legend" style="background: #bdc3c7;"></span> Noch nicht zertifiziert</div>
     </div>
     <div id="results"></div>
 </div>
@@ -134,8 +132,6 @@
         daten.forEach(k => {
             const istZert = k.Zertifiziert?.toLowerCase().trim() === 'ja';
             const id = `${k.Firmenname}-${k.Ort}`;
-            
-            // Marker-Cluster / Jitter Logik
             const lat = k.Lat + (Math.random() - 0.5) * 0.006;
             const lon = k.Lon + (Math.random() - 0.5) * 0.006;
 
@@ -215,12 +211,13 @@
                     </div>`;
             }
 
+            // ANGEPASSTE BADGES IN DER LISTE
             html += `<div class="clinic-card" id="card-${id}" onclick="fokussiereKlinik(${k.Lat}, ${k.Lon}, '${id}')">
                 ${mitDistanz ? `<span style="float:right; font-size:11px; font-weight:bold; color:#004a99;">${k.d.toFixed(1).replace('.',',')} km</span>` : ''}
                 <b>${k.Firmenname}</b>
                 <span class="klinik-info">${k.Klinik}</span>
                 <span style="font-size:12px; color:#666;">${k.Straße}<br>${k.Postleitzahl} ${k.Ort}</span><br>
-                <span class="status-badge" style="background:${istZert ? '#ff8c00' : '#bdc3c7'}">${istZert ? 'Zertifiziert' : 'Mitglied'}</span>
+                <span class="status-badge" style="background:${istZert ? '#ff8c00' : '#bdc3c7'}">${istZert ? 'Zertifiziert' : 'Noch nicht zertifiziert'}</span>
                 ${contactButtons}
             </div>`;
         });
