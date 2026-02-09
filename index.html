@@ -10,6 +10,7 @@
         body { margin: 0; padding: 0; font-family: 'Segoe UI', Roboto, sans-serif; height: 100vh; width: 100vw; overflow: hidden; background: #eee; }
         #map { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
 
+        /* Stabilisiertes Bottom Sheet */
         #sidebar { 
             position: absolute; bottom: 0; left: 0; right: 0; 
             width: 100%; height: 85vh; 
@@ -17,10 +18,16 @@
             display: flex; flex-direction: column; 
             box-shadow: 0 -5px 25px rgba(0,0,0,0.2);
             border-radius: 25px 25px 0 0;
-            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.1);
-            transform: translateY(calc(85vh - 185px)); 
+            transition: transform 0.4s ease-out;
+            /* Start-Position unten */
+            transform: translateY(calc(85vh - 180px)); 
         }
-        #sidebar.open { transform: translateY(0); }
+        
+        /* Zustand: Offen */
+        #sidebar.open { transform: translateY(0) !important; }
+        
+        /* Zustand: Minimiert (nach Kartenklick) */
+        #sidebar.minimized { transform: translateY(calc(85vh - 180px)); }
 
         @media (min-width: 769px) {
             body { display: flex; flex-direction: row; }
@@ -30,7 +37,7 @@
         }
 
         .drag-handle { width: 50px; height: 5px; background: rgba(0,0,0,0.15); border-radius: 10px; margin: 15px auto 10px auto; cursor: pointer; }
-        .search-container { background: #004a99; color: white; padding: 20px 20px 25px 20px; cursor: pointer; }
+        .search-container { background: #004a99; color: white; padding: 15px 20px 25px 20px; cursor: pointer; }
         h2 { margin: 0 0 15px 0; font-size: 22px; text-align: center; }
         
         input, select { 
@@ -46,17 +53,14 @@
         .legend-container { padding: 12px; background: #fafafa; border-bottom: 1px solid #eee; font-size: 12px; display: flex; justify-content: center; gap: 20px; }
         .dot-legend { height: 10px; width: 10px; border-radius: 50%; display: inline-block; margin-right: 5px; }
 
-        #results { overflow-y: auto; background: white; flex-grow: 1; scroll-behavior: smooth; }
-        .clinic-card { padding: 20px; border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: background 0.2s; }
+        #results { overflow-y: auto; background: white; flex-grow: 1; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+        .clinic-card { padding: 20px; border-bottom: 1px solid #f0f0f0; cursor: pointer; }
         .clinic-card.highlight { background: #fff4e6; border-left: 5px solid #ff8c00; }
         .klinik-info { font-size: 13px; color: #d35400; font-style: italic; display: block; margin: 4px 0; }
         .status-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: bold; color: white; margin-top: 8px; }
 
         .contact-row { display: flex; gap: 10px; margin-top: 12px; }
         .btn-contact { flex: 1; text-align: center; padding: 10px; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: bold; display: flex; align-items: center; justify-content: center; background: #004a99; color: white; }
-
-        /* Styling für klickbare Popups */
-        .leaflet-popup-content { cursor: pointer; }
     </style>
 </head>
 <body>
@@ -66,7 +70,7 @@
 <div id="sidebar">
     <div class="drag-handle" onclick="toggleMobileSheet()"></div>
     <div class="search-container" onclick="toggleMobileSheet()">
-        <h2>Kliniksuche</h2>
+        <h2 id="headerTitle">Kliniksuche</h2>
         <input type="text" id="plzInput" placeholder="PLZ eingeben..." onclick="event.stopPropagation()" inputmode="numeric">
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
             <select id="radiusInput" onclick="event.stopPropagation()">
@@ -101,6 +105,11 @@
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
     markerLayer = L.layerGroup().addTo(map);
 
+    // Klick auf Karte minimiert die Sidebar am Handy
+    map.on('click', () => {
+        if(window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('open');
+    });
+
     Papa.parse(csvURL, {
         download: true, header: true, skipEmptyLines: true,
         complete: function(results) {
@@ -112,12 +121,12 @@
 
             const unique = new Map();
             rawData.forEach(k => {
-                const id = `${k.Firmenname}-${k.Ort}`;
-                if (unique.has(id)) {
-                    if (!unique.get(id).Klinik.includes(k.Klinik)) unique.get(id).Klinik += " & " + k.Klinik;
-                    if (k.Zertifiziert?.toLowerCase().trim() === 'ja') unique.get(id).Zertifiziert = 'Ja';
+                const safeId = btoa(k.Firmenname + k.Ort).replace(/=/g, ""); // Erzeugt eine sichere ID
+                if (unique.has(safeId)) {
+                    if (!unique.get(safeId).Klinik.includes(k.Klinik)) unique.get(safeId).Klinik += " & " + k.Klinik;
+                    if (k.Zertifiziert?.toLowerCase().trim() === 'ja') unique.get(safeId).Zertifiziert = 'Ja';
                 } else {
-                    unique.set(id, {...k});
+                    unique.set(safeId, {...k, safeId: safeId});
                 }
             });
             alleKliniken = Array.from(unique.values()).sort((a,b) => a.Ort.localeCompare(b.Ort));
@@ -127,16 +136,17 @@
     });
 
     function toggleMobileSheet() {
-        if(window.innerWidth <= 768) document.getElementById('sidebar').classList.toggle('open');
+        if(window.innerWidth <= 768) {
+            document.getElementById('sidebar').classList.toggle('open');
+        }
     }
 
     function drawMarkers(daten) {
         markerLayer.clearLayers(); markerMap.clear();
         daten.forEach(k => {
             const istZert = k.Zertifiziert?.toLowerCase().trim() === 'ja';
-            const id = `${k.Firmenname}-${k.Ort}`;
-            const lat = k.Lat + (Math.random() - 0.5) * 0.006;
-            const lon = k.Lon + (Math.random() - 0.5) * 0.006;
+            const lat = k.Lat + (Math.random() - 0.5) * 0.005; // Jitter gegen Überlagerung
+            const lon = k.Lon + (Math.random() - 0.5) * 0.005;
 
             const marker = L.circleMarker([lat, lon], {
                 radius: istZert ? 11 : 7.5, 
@@ -144,18 +154,16 @@
                 color: "#fff", weight: 1.5, fillOpacity: 0.85
             });
 
-            // Popup-Inhalt mit klickbarem Div
-            const popupContent = `<div onclick="highlightInList('${id}')"><b>${k.Firmenname}</b><br>${k.Klinik}<br><small>(Tippen für Details)</small></div>`;
+            const popupContent = `<div onclick="highlightInList('${k.safeId}')" style="cursor:pointer"><b>${k.Firmenname}</b><br>${k.Klinik}<br><small>Tippen für Details</small></div>`;
             marker.bindPopup(popupContent);
             
-            marker.on('mouseover', function() { this.openPopup(); });
             marker.on('click', function() {
                 this.openPopup();
-                highlightInList(id);
+                highlightInList(k.safeId);
             });
 
             marker.addTo(markerLayer);
-            markerMap.set(id, marker);
+            markerMap.set(k.safeId, marker);
         });
     }
 
@@ -163,9 +171,11 @@
         const element = document.getElementById('card-' + id);
         if (element) {
             if(window.innerWidth <= 768) document.getElementById('sidebar').classList.add('open');
-            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            element.classList.add('highlight');
-            setTimeout(() => element.classList.remove('highlight'), 2000);
+            setTimeout(() => {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                element.classList.add('highlight');
+                setTimeout(() => element.classList.remove('highlight'), 2000);
+            }, 100);
         }
     }
 
@@ -206,24 +216,15 @@
         let html = "";
         treffer.forEach(k => {
             const istZert = k.Zertifiziert?.toLowerCase().trim() === 'ja';
-            const id = `${k.Firmenname}-${k.Ort}`;
-            
-            let contactButtons = "";
-            if (k.Webseite && k.Webseite.trim() !== "") {
-                const url = k.Webseite.startsWith('http') ? k.Webseite : `https://${k.Webseite}`;
-                contactButtons = `
-                    <div class="contact-row">
-                        <a href="${url}" target="_blank" class="btn-contact" onclick="event.stopPropagation()">🌐 Klinik-Webseite</a>
-                    </div>`;
-            }
+            const url = k.Webseite ? (k.Webseite.startsWith('http') ? k.Webseite : `https://${k.Webseite}`) : null;
 
-            html += `<div class="clinic-card" id="card-${id}" onclick="fokussiereKlinik(${k.Lat}, ${k.Lon}, '${id}')">
+            html += `<div class="clinic-card" id="card-${k.safeId}" onclick="fokussiereKlinik(${k.Lat}, ${k.Lon}, '${k.safeId}')">
                 ${mitDistanz ? `<span style="float:right; font-size:11px; font-weight:bold; color:#004a99;">${k.d.toFixed(1).replace('.',',')} km</span>` : ''}
                 <b>${k.Firmenname}</b>
                 <span class="klinik-info">${k.Klinik}</span>
                 <span style="font-size:12px; color:#666;">${k.Straße}<br>${k.Postleitzahl} ${k.Ort}</span><br>
                 <span class="status-badge" style="background:${istZert ? '#ff8c00' : '#bdc3c7'}">${istZert ? 'Zertifiziert' : 'Noch nicht zertifiziert'}</span>
-                ${contactButtons}
+                ${url ? `<div class="contact-row"><a href="${url}" target="_blank" class="btn-contact" onclick="event.stopPropagation()">🌐 Klinik-Webseite</a></div>` : ''}
             </div>`;
         });
         document.getElementById('results').innerHTML = html || `<div style="padding:20px; text-align:center;">Keine Kliniken gefunden.</div>`;
